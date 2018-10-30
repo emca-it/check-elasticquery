@@ -1,6 +1,10 @@
 # check-elasticquery
 This plugin check Elasticsearch query total documents. It is aimed to work with Energy Logserver, OP5 Log Analytics and is supposed to work with opensource Elasticsearch and x-pack.
 
+**Dependencies for Centos 7:**
+
+`# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape`
+
 **Usage**
 ```
 $ ./check_elasticquery.pl -U|--url=<url> -i|--index=<index> 
