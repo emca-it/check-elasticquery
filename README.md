@@ -60,3 +60,18 @@ Execute json query. Time range option wouldn't work. You should define time rang
   }
 }
 '`
+
+Date match format for timerange option:
+https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#date-math
+
+**Timerange examples:**
+
+`-T 'now/h:now-1h/h'` - events from latest hour rounded to 0 minute. When you check at 15:50 then it check 14:00-15:00.
+
+`-T 'now:now-1h'` - events from latest hour.  When you check at 15:50 then it check 14:50-15:50.
+
+`-T 'now:now-1h'` - events from latest hour.  When you check at 15:50 then it check 14:50-15:50.
+
+`-T '1540482600:1540479000'` - events in defined time range.
+
+Default is `'now/now-1d'` - events from latest 24 hours (1 day).
