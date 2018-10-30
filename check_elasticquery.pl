@@ -58,7 +58,7 @@ my $p = Monitoring::Plugin->new(
     blurb => 'This plugin check Elasticsearch query total documents. It is aimed to work
 with Energy Logserver, OP5 Log Analytics and is supposed to work with
 opensource Elasticsearch and x-pack.', 
-	extra => "Date match format for timestamp option: https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#date-math
+	extra => "Date match format for timerange option: https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#date-math
 
 THRESHOLDs for -w and -c are specified 'min:max' or 'min:' or ':max'
 (or 'max'). If specified '\@min:max', a warning status will be generated
