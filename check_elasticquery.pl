@@ -132,11 +132,19 @@ qq{-S, --search=string
 );
 
 $p->add_arg(
-	spec => 'timestamp|T=s',
+	spec => 'timerange|T=s',
 	default => "now:now-1d",
 	help => 
-qq{-T, --timestamp=string
-    Query filter timestamp range "<lte>:<gte>". You can use UNIX timestamp or date match format. Default is 24 hours. },
+qq{-T, --timerange=string
+    Query filter time range "<lte>:<gte>". You can use UNIX timestamp or date match format. Default is 24 hours. },
+);
+
+$p->add_arg(
+	spec => 'timefield=s',
+	default => "\@timestamp",
+	help => 
+qq{--timefield=string
+    Time range field. Default is \@timestamp. },
 );
 
 $p->add_arg(
@@ -162,15 +170,15 @@ $p->getopts;
 # check stuff.
 
 
-unless (not defined $p->opts->search && not defined $p->opts->timestamp) {
-	$p->plugin_exit(CRITICAL, "Define timestamp for the saved search");
+unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
+	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
 }
 
-if ( (defined $p->opts->timestamp && defined $p->opts->query) ) {
-	$p->plugin_exit(CRITICAL, "You can't use timestamp with defined query");
+if ( $p->opts->timerange ne 'now:now-1d' && defined $p->opts->query ) {
+	$p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
 }
 
-if (defined $p->opts->query && defined $p->opts->search) {
+if ( defined $p->opts->query && defined $p->opts->search ) {
 	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
 }
 
@@ -178,13 +186,14 @@ if ( $p->opts->verbose ) {
 		print "Url: ".$p->opts->url."\n" if defined $p->opts->url;
 		print "Index: ".$p->opts->index."\n" if defined $p->opts->index;
 		print "Search: ".$p->opts->search."\n" if defined $p->opts->search;
-		print "Timestamp: ".$p->opts->timestamp."\n" if defined $p->opts->timestamp;
+		print "Timerange: ".$p->opts->timerange."\n" if defined $p->opts->timerange;
+		print "Timefield: ".$p->opts->timefield."\n" if defined $p->opts->timefield;
 		print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
 }
 
 my $query;
 my $index;
-my @timestamp = split(/:/, $p->opts->timestamp) if (defined $p->opts->timestamp);
+my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
 if (defined $p->opts->search) {
 	$query = '{"query":{"query_string":{"query":"'.$p->opts->search.'"}}}';
 	$index = '.kibana';
@@ -192,7 +201,7 @@ if (defined $p->opts->search) {
 else
 {
 	if (not defined $p->opts->query) {
-		$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "@timestamp": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
 	} else {
 		$query = $p->opts->query;
 	}
@@ -207,7 +216,7 @@ if (defined $p->opts->search) {
 
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
 	if(keys $meta) {
-		$get = getSearch($p->opts->url, $p->opts->index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . backslash($meta->{query}->{query}) . '" } }, { "range": { "@timestamp": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
+		$get = getSearch($p->opts->url, $p->opts->index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . backslash($meta->{query}->{query}) . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
