@@ -1,6 +1,19 @@
 # check-elasticquery
 This plugin check Elasticsearch query total documents. It is aimed to work with Energy Logserver, OP5 Log Analytics and is supposed to work with opensource Elasticsearch and x-pack.
 
+**Usage**
+```
+$ ./check_elasticquery.pl -U|--url=<url> -i|--index=<index> 
+    [ -q|--query=<json query> ]
+    [ -S|--search=<saved search> ]
+    [ -T|--timerange=<lte:gte> ]
+    [--timefield=<time field> ]
+    [ -c|--critical=<critical threshold> ] 
+    [ -w|--warning=<warning threshold> ]
+    [ -t <timeout>]
+    [ -v|--verbose ]
+```
+
 **Usage examples**
 
 Total documents in  'beats*' index for latest 24 hours. Latest 24 hours is default time range.
