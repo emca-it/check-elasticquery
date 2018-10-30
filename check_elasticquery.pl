@@ -1,17 +1,11 @@
 #!/usr/bin/perl
 
 # Author: 	Adam Miaskiewicz
-# 			    EMCA S.A.
+# 		EMCA S.A.
+# Project URL: https://github.com/emca-it/check-elasticquery
 
 # Dependencies for Centos 7:
 # yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape
-
-# Timestamp examples:
-# -T 'now/h:now-1h/h' - events from latest hour rounded to 0 minute. When you check at 15:50 then it check 14:00-15:00.
-# -T 'now:now-1h' - events from latest hour.  When you check at 15:50 then it check 14:50-15:50.
-# -T 'now:now-1h' - events from latest hour.  When you check at 15:50 then it check 14:50-15:50.
-# -T '1540482600:1540479000' events in defined timestamp range.
-# Default 'now/now-1d' - vents from latest 24 hours (1 day).
 
 ##############################################################################
 # prologue
