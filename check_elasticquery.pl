@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-###  check_elasticsearch_query.pl
 
 # Author: 	Adam Miaskiewicz
 # 			    EMCA S.A.
