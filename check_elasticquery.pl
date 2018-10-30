@@ -47,7 +47,8 @@ my $p = Monitoring::Plugin->new(
     usage => "Usage: %s -U|--url=<url> -i|--index=<index> 
     [ -q|--query=<json query> ]
     [ -S|--search=<saved search> ]
-    [ -T|--timestamp=<lte:gte> ]
+    [ -T|--timerange=<lte:gte> ]
+	[--timefield=<time field> ]
     [ -c|--critical=<critical threshold> ] 
     [ -w|--warning=<warning threshold> ]
     [ -t <timeout>]
