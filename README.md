@@ -24,7 +24,7 @@ Total documents in  'beats*' index for latest 24 hours. Latest 24 hours is defau
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*'`
 
-Execute saved search named *protection* for latest 15 minutes. By default it checks *@timestamp* field, you can change it in *timefield* option.
+Execute saved search named *protection* for latest 15 minutes. By default it checks *@timestamp* field, you can change it in *--timefield* option.
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m'`
 
