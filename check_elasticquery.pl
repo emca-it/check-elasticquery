@@ -48,7 +48,7 @@ my $p = Monitoring::Plugin->new(
     [ -q|--query=<json query> ]
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
-	[--timefield=<time field> ]
+    [--timefield=<time field> ]
     [ -c|--critical=<critical threshold> ] 
     [ -w|--warning=<warning threshold> ]
     [ -t <timeout>]
