@@ -94,7 +94,6 @@ qq{-c, --critical=INTEGER:INTEGER
    which a critical will be generated. },
 );
 
-
 $p->add_arg(
 	spec => 'url|U=s',
 	required => 1,
@@ -144,7 +143,6 @@ qq{--timefield=string
 
 $p->add_arg(
 	spec => 'index|i=s',
-	required => 1,
 	help => 
 qq{-i, --index=string
     Elasticsearch index. },
@@ -211,8 +209,11 @@ if (defined $p->opts->search) {
 
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
 	if(keys $meta) {
+		$index = '.kibana/doc/index-pattern:'.$meta->{index};
+		$get = getSearchIndex($p->opts->url, $index);
+		$index = $get->{_source}->{'index-pattern'}->{title};
 		$meta->{query}->{query} =~ s/"/\\"/g;
-		$get = getSearch($p->opts->url, $p->opts->index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $meta->{query}->{query} . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
+		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $meta->{query}->{query} . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
@@ -256,6 +257,28 @@ sub getSearch {
 	$req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
 	$req->content_type('application/json');
 	$req->content($body);
+	# Pass request to the user agent and get a response back
+	my $res = $ua->request($req);
+
+	# Check the outcome of the response
+	my $json = JSON->new;
+
+	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+	
+	return $json->decode($res->content) if ($res->is_success == 1);
+	
+	return undef;
+}
+sub getSearchIndex {
+	my ($url, $index) = @_;
+
+	# UserAgent
+	my $ua = LWP::UserAgent->new;
+	$ua->agent($PROGNAME."/0.1");
+	$ua->timeout($p->opts->timeout);
+	# Create a request
+	my $req;
+	$req = HTTP::Request->new(GET => $url.'/'.$index);
 
 	# Pass request to the user agent and get a response back
 	my $res = $ua->request($req);
