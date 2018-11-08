@@ -143,6 +143,7 @@ qq{--timefield=string
 
 $p->add_arg(
 	spec => 'index|i=s',
+	default => '*',
 	help => 
 qq{-i, --index=string
     Elasticsearch index. },
@@ -188,7 +189,7 @@ my $query;
 my $index;
 my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
 if (defined $p->opts->search) {
-	$query = '{"query":{"query_string":{"query":"'.$p->opts->search.'"}}}';
+	$query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
 	$index = '.kibana';
 }
 else
@@ -206,7 +207,8 @@ my $total;
 my $get = getSearch($p->opts->url, $index, $query);
 
 if (defined $p->opts->search) {
-
+	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
+	
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
 	if(keys $meta) {
 		$index = '.kibana/doc/index-pattern:'.$meta->{index};
