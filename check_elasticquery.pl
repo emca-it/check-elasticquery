@@ -24,7 +24,7 @@ use Data::Dumper;
 use String::Escape qw( backslash );
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '0.1';
+$VERSION = '0.2';
 
 # get the base name of this script for use in the examples
 use File::Basename;
