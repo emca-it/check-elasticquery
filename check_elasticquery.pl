@@ -214,8 +214,8 @@ if (defined $p->opts->search) {
 		$index = '.kibana/doc/index-pattern:'.$meta->{index};
 		$get = getSearchIndex($p->opts->url, $index);
 		$index = $get->{_source}->{'index-pattern'}->{title};
-		$meta->{query}->{query} =~ s/"/\\"/g;
-		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $meta->{query}->{query} . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
+		$meta->{query}->{query_string}->{query} =~ s/"/\\"/g;
+		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $meta->{query}->{query_string}->{query} . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
