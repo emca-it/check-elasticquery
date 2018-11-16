@@ -24,7 +24,7 @@ use Data::Dumper;
 use String::Escape qw( backslash );
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '0.2';
+$VERSION = '0.3';
 
 # get the base name of this script for use in the examples
 use File::Basename;
@@ -205,6 +205,7 @@ else
 
 my $total;
 my $get = getSearch($p->opts->url, $index, $query);
+my $raw_query;
 
 if (defined $p->opts->search) {
 	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
@@ -214,8 +215,19 @@ if (defined $p->opts->search) {
 		$index = '.kibana/doc/index-pattern:'.$meta->{index};
 		$get = getSearchIndex($p->opts->url, $index);
 		$index = $get->{_source}->{'index-pattern'}->{title};
-		$meta->{query}->{query_string}->{query} =~ s/"/\\"/g;
-		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $meta->{query}->{query_string}->{query} . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
+		
+		if (ref $meta->{query}->{query} eq ref {}) {
+			$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
+			$raw_query = $meta->{query}->{query}->{query_string}->{query};
+		} elsif (ref $meta->{query}->{query} eq '') {
+			$meta->{query}->{query} =~ s/"/\\"/g;
+			$raw_query = $meta->{query}->{query};
+		} else {
+			$p->plugin_exit(CRITICAL, "Can't parse output");
+		}
+
+		$meta->{query}->{query} =~ s/"/\\"/g;
+		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
