@@ -211,7 +211,7 @@ if (defined $p->opts->search) {
 	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
 	
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
-	if(keys $meta) {
+	if(ref $meta eq ref {}) {
 		$index = '.kibana/doc/index-pattern:'.$meta->{index};
 		$get = getSearchIndex($p->opts->url, $index);
 		$index = $get->{_source}->{'index-pattern'}->{title};
@@ -233,7 +233,7 @@ if (defined $p->opts->search) {
 	}
 }
 
-if(defined $get && keys $get->{hits}) {
+if(defined $get && ref $get->{hits} eq ref {}) {
 	$total = $get->{hits}->{total};
 	print Dumper($get) if ( $p->opts->verbose );
 } else {
