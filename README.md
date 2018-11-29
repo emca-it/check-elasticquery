@@ -28,7 +28,7 @@ Execute saved search named *protection* for latest 15 minutes. By default it che
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m'`
 
-As above plus show one document. One doesn't mean latest. For latest you should execute json query with defined sort by time.
+As above plus show one latest document.
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1`
 

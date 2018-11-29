@@ -24,7 +24,7 @@ use Data::Dumper;
 use String::Escape qw( backslash );
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '0.3';
+$VERSION = '0.4';
 
 # get the base name of this script for use in the examples
 use File::Basename;
@@ -43,6 +43,8 @@ my $p = Monitoring::Plugin->new(
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
     [--timefield=<time field> ]
+	[ -D|--documents=<number of latest documents to show> ]
+	[ -f|--fields=<fields to show> ]
     [ -c|--critical=<critical threshold> ] 
     [ -w|--warning=<warning threshold> ]
     [ -t <timeout>]
@@ -107,6 +109,13 @@ $p->add_arg(
 	help => 
 qq{-S, --search=string
     Elasticsearch saved search. },
+);
+
+$p->add_arg(
+	spec => 'fields|f=s',
+	help => 
+qq{-S, --search=string
+    Fields to show with Document option. },
 );
 
 $p->add_arg(
@@ -208,6 +217,7 @@ my $get = getSearch($p->opts->url, $index, $query);
 my $raw_query;
 
 if (defined $p->opts->search) {
+	my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':undef;
 	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
 	
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
@@ -227,7 +237,7 @@ if (defined $p->opts->search) {
 		}
 
 		$meta->{query}->{query} =~ s/"/\\"/g;
-		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', "query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
+		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
@@ -256,7 +266,19 @@ $p->add_perfdata(
 
 # Exit and return code
 $Data::Dumper::Terse=1;
-$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": ${total}". (($p->opts->documents)>0?sprintf("\n".Dumper $get->{hits}->{hits}):'' ));
+
+
+if (defined $p->opts->fields && $p->opts->documents>0) {
+	my $exit = '';
+	#print Dumper($get->{hits}->{hits});
+	foreach my $n (@{$get->{hits}->{hits}}) {
+		$exit .= dumpKeys($n->{_source});		
+	}
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total\n" . $exit);
+} 
+elsif (not defined $p->opts->fields && $p->opts->documents>0) {
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total".Dumper($get->{hits}->{hits}[0]->{_source}));
+} else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total"); }
 
 #### Subrutines
 sub getSearch {
@@ -305,4 +327,13 @@ sub getSearchIndex {
 	return $json->decode($res->content) if ($res->is_success == 1);
 	
 	return undef;
+}
+
+sub dumpKeys {
+    my $orig = shift;
+    my @keys = split(/,/, $p->opts->fields);
+    my %new;
+    @new{ @keys } = @{ $orig }{ @keys };
+    use Data::Dumper;
+    return sprintf(Data::Dumper->new([\%new])->Useqq(1)->Dump, "\n");
 }
