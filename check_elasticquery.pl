@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
-# Author: 	Adam Miaskiewicz
-# 		EMCA S.A.
+# Author:       Adam Miaskiewicz
+#               EMCA S.A.
 # Project URL: https://github.com/emca-it/check-elasticquery
 
 # Dependencies for Centos 7:
@@ -32,29 +32,31 @@ $PROGNAME = basename($0);
 
 ##############################################################################
 # define and get the command line options.
-#   see the command line option guidelines at 
+#   see the command line option guidelines at
 #   https://nagios-plugins.org/doc/guidelines.html#PLUGOPTIONS
 
 
 # Instantiate Nagios::Monitoring::Plugin object (the 'usage' parameter is mandatory)
 my $p = Monitoring::Plugin->new(
-    usage => "Usage: %s -U|--url=<url> -i|--index=<index> 
+    usage => "Usage: %s -U|--url=<url> -i|--index=<index>
     [ -q|--query=<json query> ]
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
     [--timefield=<time field> ]
-	[ -D|--documents=<number of latest documents to show> ]
-	[ -f|--fields=<fields to show> ]
-    [ -c|--critical=<critical threshold> ] 
+    [ -D|--documents=<number of latest documents to show> ]
+    [ -f|--fields=<fields to show> ]
+    [ -l|--length=<max field length> ]
+    [ -N|--name=<output string> ]
+    [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
     [ -t <timeout>]
     [ -v|--verbose ]",
     version => $VERSION,
-	license => "Apache License 2.0, see LICENSE for more details.",
+        license => "Apache License 2.0, see LICENSE for more details.",
     blurb => 'This plugin check Elasticsearch query total documents. It is aimed to work
 with Energy Logserver, OP5 Log Analytics and is supposed to work with
-opensource Elasticsearch and x-pack.', 
-	extra => "Date match format for timerange option: https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#date-math
+opensource Elasticsearch and x-pack.',
+        extra => "Date match format for timerange option: https://www.elastic.co/guide/en/elasticsearch/reference/current/common-options.html#date-math
 
 THRESHOLDs for -w and -c are specified 'min:max' or 'min:' or ':max'
 (or 'max'). If specified '\@min:max', a warning status will be generated
@@ -80,87 +82,95 @@ See more threshold examples at http
 # usage, help, version, timeout and verbose are defined by default.
 
 $p->add_arg(
-	spec => 'warning|w=s',
+        spec => 'warning|w=s',
 
-	help => 
+        help =>
 qq{-w, --warning=INTEGER:INTEGER
    Minimum and maximum scan freshness in days, outside of which a
    warning will be generated.  If omitted, no warning is generated.},
 );
 
 $p->add_arg(
-	spec => 'critical|c=s',
-	help => 
+        spec => 'critical|c=s',
+        help =>
 qq{-c, --critical=INTEGER:INTEGER
    Minimum and maximum scan freshness in days, outside of
    which a critical will be generated. },
 );
 
 $p->add_arg(
-	spec => 'url|U=s',
-	required => 1,
-	help => 
+        spec => 'url|U=s',
+        required => 1,
+        help =>
 qq{-U, --url=string
     Elasticsearch API URL. It allows basic-auth http[s]://[<username>:<password>]\@127.0.0.1:9200},
 );
 
 $p->add_arg(
-	spec => 'search|S=s',
-	help => 
+        spec => 'search|S=s',
+        help =>
 qq{-S, --search=string
     Elasticsearch saved search. },
 );
 
 $p->add_arg(
-	spec => 'fields|f=s',
-	help => 
+        spec => 'fields|f=s',
+        help =>
 qq{-S, --search=string
     Fields to show with Document option. },
 );
 
 $p->add_arg(
-	spec => 'documents|D=i',
-	default => 0,
-	help => 
+        spec => 'documents|D=i',
+        default => 0,
+        help =>
 qq{-D, --documents=string
     Show X documents. Default is 0.'},
 );
 
 $p->add_arg(
-	spec => 'name|N=s',
-	default => 'Total documents',
-	help => 
+        spec => 'length|l=i',
+        default => 255,
+        help =>
+qq{-l, --length=string
+    Maximum message length. Default is 255.'},
+);
+
+$p->add_arg(
+        spec => 'name|N=s',
+        default => 'Total documents',
+        help =>
 qq{-S, --search=string
     Output name. Show output with defined name. Default is 'Total documents'.},
 );
 
 $p->add_arg(
-	spec => 'timerange|T=s',
-	default => "now:now-1d",
-	help => 
+        spec => 'timerange|T=s',
+        default => "now:now-1d",
+        help =>
 qq{-T, --timerange=string
     Query filter time range "<lte>:<gte>". You can use UNIX timestamp or date match format. Default is 24 hours. },
 );
 
 $p->add_arg(
-	spec => 'timefield=s',
-	default => "\@timestamp",
-	help => 
+        spec => 'timefield=s',
+        default => "\@timestamp",
+        help =>
 qq{--timefield=string
     Time range field. Default is \@timestamp. },
 );
 
 $p->add_arg(
-	spec => 'index|i=s',
-	default => '*',
-	help => 
+        spec => 'index|i=s',
+        default => '*',
+        help =>
 qq{-i, --index=string
     Elasticsearch index. },
 );
 
 $p->add_arg(
-	spec => 'query|q=s',
-	help => 
+        spec => 'query|q=s',
+        help =>
 qq{-q, --query=string
     Execute this query in Elasticsearch. },
 );
@@ -174,42 +184,42 @@ $p->getopts;
 
 
 unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
-	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
+        $p->plugin_exit(CRITICAL, "Define timerange for the saved search");
 }
 
 if ( $p->opts->timerange ne 'now:now-1d' && defined $p->opts->query ) {
-	$p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
+        $p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
 }
 
 if ( defined $p->opts->query && defined $p->opts->search ) {
-	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
+        $p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
 }
 
 if ( $p->opts->verbose ) {
-		print "Url: ".$p->opts->url."\n" if defined $p->opts->url;
-		print "Index: ".$p->opts->index."\n" if defined $p->opts->index;
-		print "Search: ".$p->opts->search."\n" if defined $p->opts->search;
-		print "Timerange: ".$p->opts->timerange."\n" if defined $p->opts->timerange;
-		print "Timefield: ".$p->opts->timefield."\n" if defined $p->opts->timefield;
-		print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
+                print "Url: ".$p->opts->url."\n" if defined $p->opts->url;
+                print "Index: ".$p->opts->index."\n" if defined $p->opts->index;
+                print "Search: ".$p->opts->search."\n" if defined $p->opts->search;
+                print "Timerange: ".$p->opts->timerange."\n" if defined $p->opts->timerange;
+                print "Timefield: ".$p->opts->timefield."\n" if defined $p->opts->timefield;
+                print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
 }
 
 my $query;
 my $index;
 my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
 if (defined $p->opts->search) {
-	$query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
-	$index = '.kibana';
+        $query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
+        $index = '.kibana';
 }
 else
 {
-	if (not defined $p->opts->query) {
-		$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
-	} else {
-		$query = $p->opts->query;
-	}
-	
-	$index = $p->opts->index;
+        if (not defined $p->opts->query) {
+                $query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+        } else {
+                $query = $p->opts->query;
+        }
+
+        $index = $p->opts->index;
 }
 
 my $total;
@@ -217,37 +227,37 @@ my $get = getSearch($p->opts->url, $index, $query);
 my $raw_query;
 
 if (defined $p->opts->search) {
-	my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':undef;
-	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
-	
-	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
-	if(ref $meta eq ref {}) {
-		$index = '.kibana/doc/index-pattern:'.$meta->{index};
-		$get = getSearchIndex($p->opts->url, $index);
-		$index = $get->{_source}->{'index-pattern'}->{title};
-		
-		if (ref $meta->{query}->{query} eq ref {}) {
-			$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
-			$raw_query = $meta->{query}->{query}->{query_string}->{query};
-		} elsif (ref $meta->{query}->{query} eq '') {
-			$meta->{query}->{query} =~ s/"/\\"/g;
-			$raw_query = $meta->{query}->{query};
-		} else {
-			$p->plugin_exit(CRITICAL, "Can't parse output");
-		}
+        my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
+        print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
 
-		$meta->{query}->{query} =~ s/"/\\"/g;
-		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');		
-	} else {
-		$p->plugin_exit(CRITICAL, "Saved query not found");
-	}
+        my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
+        if(ref $meta eq ref {}) {
+                $index = '.kibana/doc/index-pattern:'.$meta->{index};
+                $get = getSearchIndex($p->opts->url, $index);
+                $index = $get->{_source}->{'index-pattern'}->{title};
+
+                if (ref $meta->{query}->{query} eq ref {}) {
+                        $meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
+                        $raw_query = $meta->{query}->{query}->{query_string}->{query};
+                } elsif (ref $meta->{query}->{query} eq '') {
+                        $meta->{query}->{query} =~ s/"/\\"/g;
+                        $raw_query = $meta->{query}->{query};
+                } else {
+                        $p->plugin_exit(CRITICAL, "Can't parse output");
+                }
+
+                $meta->{query}->{query} =~ s/"/\\"/g;
+                $get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
+        } else {
+                $p->plugin_exit(CRITICAL, "Saved query not found");
+        }
 }
 
 if(defined $get && ref $get->{hits} eq ref {}) {
-	$total = $get->{hits}->{total};
-	print Dumper($get) if ( $p->opts->verbose );
+        $total = $get->{hits}->{total};
+        print Dumper($get) if ( $p->opts->verbose );
 } else {
-	$p->plugin_exit(CRITICAL, "Can not parse query");
+        $p->plugin_exit(CRITICAL, "Can not parse query");
 }
 
 ##############################################################################
@@ -269,64 +279,64 @@ $Data::Dumper::Terse=1;
 
 
 if (defined $p->opts->fields && $p->opts->documents>0) {
-	my $exit = '';
-	#print Dumper($get->{hits}->{hits});
-	foreach my $n (@{$get->{hits}->{hits}}) {
-		$exit .= dumpKeys($n->{_source});		
-	}
-	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total\n" . $exit);
-} 
-elsif (not defined $p->opts->fields && $p->opts->documents>0) {
-	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total".Dumper($get->{hits}->{hits}[0]->{_source}));
-} else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name.": $total"); }
+        my $exit = '';
+        #print Dumper($get->{hits}->{hits});
+        foreach my $n (@{$get->{hits}->{hits}}) {
+                $exit .= dumpKeys($n->{_source});
+        }
+        $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
+}
+elsif ($p->opts->documents > 0) {
+        $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".Dumper($get->{hits}->{hits}));
+} else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); }
 
 #### Subrutines
 sub getSearch {
-	my ($url, $index, $body) = @_;
+        my ($url, $index, $body) = @_;
 
-	# UserAgent
-	my $ua = LWP::UserAgent->new;
-	$ua->agent($PROGNAME."/0.1");
-	$ua->timeout($p->opts->timeout);
-	# Create a request
-	my $req;
-	$req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
-	$req->content_type('application/json');
-	$req->content($body);
-	# Pass request to the user agent and get a response back
-	my $res = $ua->request($req);
+        # UserAgent
+        my $ua = LWP::UserAgent->new;
+        $ua->agent($PROGNAME."/0.1");
+        $ua->timeout($p->opts->timeout);
+        # Create a request
+        my $req;
+        $req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
+        $req->content_type('application/json');
+        $req->content($body);
+        # Pass request to the user agent and get a response back
+        my $res = $ua->request($req);
 
-	# Check the outcome of the response
-	my $json = JSON->new;
+        # Check the outcome of the response
+        my $json = JSON->new;
 
-	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
-	
-	return $json->decode($res->content) if ($res->is_success == 1);
-	
-	return undef;
+        $p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+
+        return $json->decode($res->content) if ($res->is_success == 1);
+
+        return undef;
 }
 sub getSearchIndex {
-	my ($url, $index) = @_;
+        my ($url, $index) = @_;
 
-	# UserAgent
-	my $ua = LWP::UserAgent->new;
-	$ua->agent($PROGNAME."/0.1");
-	$ua->timeout($p->opts->timeout);
-	# Create a request
-	my $req;
-	$req = HTTP::Request->new(GET => $url.'/'.$index);
+        # UserAgent
+        my $ua = LWP::UserAgent->new;
+        $ua->agent($PROGNAME."/0.1");
+        $ua->timeout($p->opts->timeout);
+        # Create a request
+        my $req;
+        $req = HTTP::Request->new(GET => $url.'/'.$index);
 
-	# Pass request to the user agent and get a response back
-	my $res = $ua->request($req);
+        # Pass request to the user agent and get a response back
+        my $res = $ua->request($req);
 
-	# Check the outcome of the response
-	my $json = JSON->new;
+        # Check the outcome of the response
+        my $json = JSON->new;
 
-	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
-	
-	return $json->decode($res->content) if ($res->is_success == 1);
-	
-	return undef;
+        $p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+
+        return $json->decode($res->content) if ($res->is_success == 1);
+
+        return undef;
 }
 
 sub dumpKeys {
@@ -334,6 +344,10 @@ sub dumpKeys {
     my @keys = split(/,/, $p->opts->fields);
     my %new;
     @new{ @keys } = @{ $orig }{ @keys };
+        foreach my $key (keys %new)
+        {
+          $new{$key} = substr($new{$key}, 0, $p->opts->length);
+        }
     use Data::Dumper;
     return sprintf(Data::Dumper->new([\%new])->Useqq(1)->Dump, "\n");
 }
