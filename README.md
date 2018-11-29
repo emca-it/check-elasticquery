@@ -32,6 +32,14 @@ As above plus show one latest document.
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1`
 
+As above plus filter output to selected fields.
+
+`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp`
+
+As above plus limit output fields value to 100 characters.
+
+`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp -l 100`
+
 Execute json query. Time range option wouldn't work. You should define time range in query.
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -q '
