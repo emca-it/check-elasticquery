@@ -40,9 +40,12 @@ As above plus limit output fields value to 100 characters.
 
 `./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp -l 100`
 
+Execute lucene query.
+`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -q 'beat.name:example.com' -T 'now:now-15m' -D 1 -f message,timestamp`
+
 Execute json query. Time range option wouldn't work. You should define time range in query.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -q '
+`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -j -q '
 {
  "size": 0,
  "query": {
