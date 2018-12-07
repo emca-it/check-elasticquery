@@ -24,7 +24,7 @@ use Data::Dumper;
 use String::Escape qw( backslash );
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '0.4';
+$VERSION = '0.5';
 
 # get the base name of this script for use in the examples
 use File::Basename;
@@ -39,7 +39,8 @@ $PROGNAME = basename($0);
 # Instantiate Nagios::Monitoring::Plugin object (the 'usage' parameter is mandatory)
 my $p = Monitoring::Plugin->new(
     usage => "Usage: %s -U|--url=<url> -i|--index=<index>
-    [ -q|--query=<json query> ]
+    [ -q|--query=<lucene query> ]
+    [ -j|--json]
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
     [--timefield=<time field> ]
@@ -49,6 +50,7 @@ my $p = Monitoring::Plugin->new(
     [ -N|--name=<output string> ]
     [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
+    [ --curly ]
     [ -t <timeout>]
     [ -v|--verbose ]",
     version => $VERSION,
@@ -172,8 +174,24 @@ $p->add_arg(
         spec => 'query|q=s',
         help =>
 qq{-q, --query=string
-    Execute this query in Elasticsearch. },
+    Execute this lucene query in Elasticsearch. },
 );
+
+$p->add_arg(
+        spec => 'json|j',
+        help =>
+qq{-j, --json
+    Use json intead of lucene syntax. },
+);
+
+$p->add_arg(
+        spec => 'curly',
+        help =>
+qq{--hidecurly
+    Hide curly brackets in results. },
+);
+
+
 
 
 # Parse arguments and process standard ones (e.g. usage, help, version)
@@ -184,42 +202,48 @@ $p->getopts;
 
 
 unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
-        $p->plugin_exit(CRITICAL, "Define timerange for the saved search");
+	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
 }
 
 if ( $p->opts->timerange ne 'now:now-1d' && defined $p->opts->query ) {
-        $p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
+	$p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
 }
 
 if ( defined $p->opts->query && defined $p->opts->search ) {
-        $p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
+	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
 }
 
 if ( $p->opts->verbose ) {
-                print "Url: ".$p->opts->url."\n" if defined $p->opts->url;
-                print "Index: ".$p->opts->index."\n" if defined $p->opts->index;
-                print "Search: ".$p->opts->search."\n" if defined $p->opts->search;
-                print "Timerange: ".$p->opts->timerange."\n" if defined $p->opts->timerange;
-                print "Timefield: ".$p->opts->timefield."\n" if defined $p->opts->timefield;
-                print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
+	print "Url: ".$p->opts->url."\n" if defined $p->opts->url;
+	print "Index: ".$p->opts->index."\n" if defined $p->opts->index;
+	print "Search: ".$p->opts->search."\n" if defined $p->opts->search;
+	print "Timerange: ".$p->opts->timerange."\n" if defined $p->opts->timerange;
+	print "Timefield: ".$p->opts->timefield."\n" if defined $p->opts->timefield;
+	print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
 }
 
 my $query;
 my $index;
 my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
+my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
+
 if (defined $p->opts->search) {
-        $query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
-        $index = '.kibana';
+	$query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
+	$index = '.kibana';
 }
 else
 {
-        if (not defined $p->opts->query) {
-                $query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
-        } else {
-                $query = $p->opts->query;
-        }
+	if (not defined $p->opts->query) {
+		$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+	} else {
+		if (not defined $p->opts->json) {
+			$query =  '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "'.$p->opts->query.'", "analyze_wildcard": true, "default_field": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		} else {
+			$query = $p->opts->query;
+		}
+	}
 
-        $index = $p->opts->index;
+	$index = $p->opts->index;
 }
 
 my $total;
@@ -227,37 +251,36 @@ my $get = getSearch($p->opts->url, $index, $query);
 my $raw_query;
 
 if (defined $p->opts->search) {
-        my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
-        print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
+	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
 
-        my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
-        if(ref $meta eq ref {}) {
-                $index = '.kibana/doc/index-pattern:'.$meta->{index};
-                $get = getSearchIndex($p->opts->url, $index);
-                $index = $get->{_source}->{'index-pattern'}->{title};
+	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
+	if(ref $meta eq ref {}) {
+			$index = '.kibana/doc/index-pattern:'.$meta->{index};
+			$get = getSearchIndex($p->opts->url, $index);
+			$index = $get->{_source}->{'index-pattern'}->{title};
 
-                if (ref $meta->{query}->{query} eq ref {}) {
-                        $meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
-                        $raw_query = $meta->{query}->{query}->{query_string}->{query};
-                } elsif (ref $meta->{query}->{query} eq '') {
-                        $meta->{query}->{query} =~ s/"/\\"/g;
-                        $raw_query = $meta->{query}->{query};
-                } else {
-                        $p->plugin_exit(CRITICAL, "Can't parse output");
-                }
+			if (ref $meta->{query}->{query} eq ref {}) {
+					$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
+					$raw_query = $meta->{query}->{query}->{query_string}->{query};
+			} elsif (ref $meta->{query}->{query} eq '') {
+					$meta->{query}->{query} =~ s/"/\\"/g;
+					$raw_query = $meta->{query}->{query};
+			} else {
+					$p->plugin_exit(CRITICAL, "Can't parse output");
+			}
 
-                $meta->{query}->{query} =~ s/"/\\"/g;
-                $get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
-        } else {
-                $p->plugin_exit(CRITICAL, "Saved query not found");
-        }
+			$meta->{query}->{query} =~ s/"/\\"/g;
+			$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
+	} else {
+			$p->plugin_exit(CRITICAL, "Saved query not found");
+	}
 }
 
 if(defined $get && ref $get->{hits} eq ref {}) {
-        $total = $get->{hits}->{total};
-        print Dumper($get) if ( $p->opts->verbose );
+	$total = $get->{hits}->{total};
+	print Dumper($get) if ( $p->opts->verbose );
 } else {
-        $p->plugin_exit(CRITICAL, "Can not parse query");
+	$p->plugin_exit(CRITICAL, "Can not parse query");
 }
 
 ##############################################################################
@@ -279,64 +302,69 @@ $Data::Dumper::Terse=1;
 
 
 if (defined $p->opts->fields && $p->opts->documents>0) {
-        my $exit = '';
-        #print Dumper($get->{hits}->{hits});
-        foreach my $n (@{$get->{hits}->{hits}}) {
-                $exit .= dumpKeys($n->{_source});
-        }
-        $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
+	my $exit = '';
+	foreach my $n (@{$get->{hits}->{hits}}) {
+		$exit .= dumpKeys($n->{_source});
+	}
+	if (defined $p->opts->curly)
+	{
+		$exit =~ s#[{}]##g;	
+		$exit =~ s/\n//;
+		$exit =~ s/\n\n/\n/g;
+	}
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
 }
 elsif ($p->opts->documents > 0) {
-        $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".Dumper($get->{hits}->{hits}));
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".Dumper($get->{hits}->{hits}));
 } else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); }
 
 #### Subrutines
 sub getSearch {
-        my ($url, $index, $body) = @_;
+	my ($url, $index, $body) = @_;
 
-        # UserAgent
-        my $ua = LWP::UserAgent->new;
-        $ua->agent($PROGNAME."/0.1");
-        $ua->timeout($p->opts->timeout);
-        # Create a request
-        my $req;
-        $req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
-        $req->content_type('application/json');
-        $req->content($body);
-        # Pass request to the user agent and get a response back
-        my $res = $ua->request($req);
+	# UserAgent
+	my $ua = LWP::UserAgent->new;
+	$ua->agent($PROGNAME."/0.1");
+	$ua->timeout($p->opts->timeout);
+	# Create a request
+	my $req;
+	$req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
+	$req->content_type('application/json');
+	$req->content($body);
+	# Pass request to the user agent and get a response back
+	my $res = $ua->request($req);
 
-        # Check the outcome of the response
-        my $json = JSON->new;
+	# Check the outcome of the response
+	my $json = JSON->new;
 
-        $p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
 
-        return $json->decode($res->content) if ($res->is_success == 1);
+	return $json->decode($res->content) if ($res->is_success == 1);
 
-        return undef;
+	return undef;
 }
 sub getSearchIndex {
-        my ($url, $index) = @_;
+	my ($url, $index) = @_;
 
-        # UserAgent
-        my $ua = LWP::UserAgent->new;
-        $ua->agent($PROGNAME."/0.1");
-        $ua->timeout($p->opts->timeout);
-        # Create a request
-        my $req;
-        $req = HTTP::Request->new(GET => $url.'/'.$index);
+	# UserAgent
+	my $ua = LWP::UserAgent->new;
+	$ua->agent($PROGNAME."/0.1");
+	$ua->timeout($p->opts->timeout);
+	# Create a request
+	my $req;
+	$req = HTTP::Request->new(GET => $url.'/'.$index);
 
-        # Pass request to the user agent and get a response back
-        my $res = $ua->request($req);
+	# Pass request to the user agent and get a response back
+	my $res = $ua->request($req);
 
-        # Check the outcome of the response
-        my $json = JSON->new;
+	# Check the outcome of the response
+	my $json = JSON->new;
 
-        $p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
 
-        return $json->decode($res->content) if ($res->is_success == 1);
+	return $json->decode($res->content) if ($res->is_success == 1);
 
-        return undef;
+	return undef;
 }
 
 sub dumpKeys {
