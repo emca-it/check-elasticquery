@@ -39,7 +39,8 @@ $PROGNAME = basename($0);
 # Instantiate Nagios::Monitoring::Plugin object (the 'usage' parameter is mandatory)
 my $p = Monitoring::Plugin->new(
     usage => "Usage: %s -U|--url=<url> -i|--index=<index>
-    [ -q|--query=<json query> ]
+    [ -q|--query=<lucene query> ]
+    [ -j|--json]
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
     [--timefield=<time field> ]
@@ -49,6 +50,7 @@ my $p = Monitoring::Plugin->new(
     [ -N|--name=<output string> ]
     [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
+    [ --curly ]
     [ -t <timeout>]
     [ -v|--verbose ]",
     version => $VERSION,
@@ -172,8 +174,24 @@ $p->add_arg(
         spec => 'query|q=s',
         help =>
 qq{-q, --query=string
-    Execute this query in Elasticsearch. },
+    Execute this lucene query in Elasticsearch. },
 );
+
+$p->add_arg(
+        spec => 'json|j',
+        help =>
+qq{-j, --json
+    Use json intead of lucene syntax. },
+);
+
+$p->add_arg(
+        spec => 'curly',
+        help =>
+qq{--hidecurly
+    Hide curly brackets in results. },
+);
+
+
 
 
 # Parse arguments and process standard ones (e.g. usage, help, version)
@@ -207,6 +225,8 @@ if ( $p->opts->verbose ) {
 my $query;
 my $index;
 my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
+my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
+
 if (defined $p->opts->search) {
         $query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
         $index = '.kibana';
@@ -214,9 +234,13 @@ if (defined $p->opts->search) {
 else
 {
         if (not defined $p->opts->query) {
-                $query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+			$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
         } else {
-                $query = $p->opts->query;
+			if (not defined $p->opts->json) {
+				$query =  '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "'.$p->opts->query.'", "analyze_wildcard": true, "default_field": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+			} else {
+				$query = $p->opts->query;
+			}
         }
 
         $index = $p->opts->index;
@@ -227,7 +251,6 @@ my $get = getSearch($p->opts->url, $index, $query);
 my $raw_query;
 
 if (defined $p->opts->search) {
-        my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
         print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
 
         my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
@@ -280,10 +303,15 @@ $Data::Dumper::Terse=1;
 
 if (defined $p->opts->fields && $p->opts->documents>0) {
         my $exit = '';
-        #print Dumper($get->{hits}->{hits});
         foreach my $n (@{$get->{hits}->{hits}}) {
-                $exit .= dumpKeys($n->{_source});
+			$exit .= dumpKeys($n->{_source});
         }
+		if (defined $p->opts->curly)
+		{
+					$exit =~ s#[{}]##g;	
+					$exit =~ s/\n//;
+					$exit =~ s/\n\n/\n/g;
+		}
         $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
 }
 elsif ($p->opts->documents > 0) {
