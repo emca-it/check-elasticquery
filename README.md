@@ -3,7 +3,7 @@ This plugin check Elasticsearch query total documents. It is aimed to work with 
 
 **Dependencies for Centos 7:**
 
-`# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape`
+`# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape perl-Data-Dumper`
 
 **Usage**
 ```
