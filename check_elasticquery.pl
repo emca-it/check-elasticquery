@@ -205,10 +205,6 @@ unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
 	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
 }
 
-if ( $p->opts->timerange ne 'now:now-1d' && defined $p->opts->query ) {
-	$p->plugin_exit(CRITICAL, "You can't use timerange with defined query");
-}
-
 if ( defined $p->opts->query && defined $p->opts->search ) {
 	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
 }
@@ -300,9 +296,9 @@ $p->add_perfdata(
 # Exit and return code
 $Data::Dumper::Terse=1;
 
+my $exit = '';
 
 if (defined $p->opts->fields && $p->opts->documents>0) {
-	my $exit = '';
 	foreach my $n (@{$get->{hits}->{hits}}) {
 		$exit .= dumpKeys($n->{_source});
 	}
@@ -315,7 +311,16 @@ if (defined $p->opts->fields && $p->opts->documents>0) {
 	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
 }
 elsif ($p->opts->documents > 0) {
-	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".Dumper($get->{hits}->{hits}));
+	$exit .= "\n";
+	foreach my $n (@{$get->{hits}->{hits}}) {
+		$exit .= Dumper($n->{_source});
+	}
+	if (defined $p->opts->curly)
+	{
+		$exit =~ s#[{}]##g;	
+		$exit =~ s/\n\n/\n/g;
+	}
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".$exit);
 } else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); }
 
 #### Subrutines
