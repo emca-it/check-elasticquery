@@ -21,7 +21,9 @@ use Monitoring::Plugin;
 use LWP::UserAgent;
 use JSON;
 use Data::Dumper;
+
 use String::Escape qw( backslash );
+
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
 $VERSION = '0.5';
@@ -29,6 +31,7 @@ $VERSION = '0.5';
 # get the base name of this script for use in the examples
 use File::Basename;
 $PROGNAME = basename($0);
+
 
 ##############################################################################
 # define and get the command line options.
@@ -50,7 +53,7 @@ my $p = Monitoring::Plugin->new(
     [ -N|--name=<output string> ]
     [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
-    [ --curly ]
+    [ --hidecurly ]
     [ -t <timeout>]
     [ -v|--verbose ]",
     version => $VERSION,
@@ -185,11 +188,19 @@ qq{-j, --json
 );
 
 $p->add_arg(
-        spec => 'curly',
+        spec => 'hidecurly',
         help =>
-qq{--hidecurly
+qq{--curly
     Hide curly brackets in results. },
 );
+
+$p->add_arg(
+        spec => 'oneliner',
+        help =>
+qq{--oneliner
+    Show one document in first line. },
+);
+
 
 
 
@@ -207,6 +218,12 @@ unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
 
 if ( defined $p->opts->query && defined $p->opts->search ) {
 	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
+}
+
+if(defined $p->opts->oneliner) {
+	if($p->opts->documents > 1) {
+			$p->plugin_exit(CRITICAL, "Oneliner is blocked for one document only.");
+	}
 }
 
 if ( $p->opts->verbose ) {
@@ -296,32 +313,45 @@ $p->add_perfdata(
 # Exit and return code
 $Data::Dumper::Terse=1;
 
+if(defined $p->opts->oneliner) {
+	$Data::Dumper::Indent    = 0;
+	$Data::Dumper::Sortkeys  = 1;
+	$Data::Dumper::Quotekeys = 1;
+	$Data::Dumper::Deparse   = 1;
+}
+
 my $exit = '';
 
 if (defined $p->opts->fields && $p->opts->documents>0) {
+	$exit .= "\n" if(not defined $p->opts->oneliner);
 	foreach my $n (@{$get->{hits}->{hits}}) {
 		$exit .= dumpKeys($n->{_source});
 	}
-	if (defined $p->opts->curly)
-	{
+	if (defined $p->opts->hidecurly) {
 		$exit =~ s#[{}]##g;	
 		$exit =~ s/\n//;
 		$exit =~ s/\n\n/\n/g;
 	}
-	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total\n" . $exit);
+
+	$exit =~ s/[\n\r]/ /g if(defined $p->opts->oneliner);
+	
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total " . $exit);
 }
 elsif ($p->opts->documents > 0) {
 	$exit .= "\n";
 	foreach my $n (@{$get->{hits}->{hits}}) {
 		$exit .= Dumper($n->{_source});
 	}
-	if (defined $p->opts->curly)
-	{
+	if (defined $p->opts->hidecurly) {
 		$exit =~ s#[{}]##g;	
 		$exit =~ s/\n\n/\n/g;
 	}
-	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total".$exit);
+	$exit =~ s/[\n\r]/ /g if(defined $p->opts->oneliner);
+	
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total ".$exit);
 } else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); }
+
+
 
 #### Subrutines
 sub getSearch {
@@ -381,6 +411,6 @@ sub dumpKeys {
         {
           $new{$key} = substr($new{$key}, 0, $p->opts->length);
         }
-    use Data::Dumper;
+		
     return sprintf(Data::Dumper->new([\%new])->Useqq(1)->Dump, "\n");
 }
