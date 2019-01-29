@@ -190,7 +190,7 @@ qq{-j, --json
 $p->add_arg(
         spec => 'hidecurly',
         help =>
-qq{--curly
+qq{--hidecurly
     Hide curly brackets in results. },
 );
 
@@ -200,9 +200,6 @@ $p->add_arg(
 qq{--oneliner
     Show one document in first line. },
 );
-
-
-
 
 
 # Parse arguments and process standard ones (e.g. usage, help, version)
