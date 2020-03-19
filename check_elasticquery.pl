@@ -273,7 +273,7 @@ if (defined $p->opts->search) {
 					$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
 					$raw_query = $meta->{query}->{query}->{query_string}->{query};
 			} elsif (ref $meta->{query}->{query} eq '') {
-					$meta->{query}->{query} =~ s/"/\\"/g;
+					$meta->{query}->{query} = "*";
 					$raw_query = $meta->{query}->{query};
 			} else {
 					$p->plugin_exit(CRITICAL, "Can't parse output");
