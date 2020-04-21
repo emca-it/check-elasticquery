@@ -4,6 +4,7 @@
 #               EMCA S.A.
 # Project URL: https://github.com/emca-it/check-elasticquery
 
+# Work with Elasticsearch 6
 # Dependencies for Centos 7:
 # yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape
 
@@ -26,7 +27,7 @@ use String::Escape qw( backslash );
 
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '0.5.1';
+$VERSION = '1.0.0';
 
 # get the base name of this script for use in the examples
 use File::Basename;
@@ -265,24 +266,30 @@ if (defined $p->opts->search) {
 
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
 	if(ref $meta eq ref {}) {
-			$index = '.kibana/doc/index-pattern:'.$meta->{index};
-			$get = getSearchIndex($p->opts->url, $index);
-			$index = $get->{_source}->{'index-pattern'}->{title};
+        $index = '.kibana/doc/index-pattern:'.$meta->{index};
+        $get = getSearchIndex($p->opts->url, $index);
+		$index = $get->{_source}->{'index-pattern'}->{title};
 
-			if (ref $meta->{query}->{query} eq ref {}) {
-					$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
-					$raw_query = $meta->{query}->{query}->{query_string}->{query};
-			} elsif (ref $meta->{query}->{query} eq '') {
-					$meta->{query}->{query} = "*";
-					$raw_query = $meta->{query}->{query};
-			} else {
-					$p->plugin_exit(CRITICAL, "Can't parse output");
-			}
+		if (ref $meta->{query}->{query} eq ref {}) {
+			$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
+			$raw_query = $meta->{query}->{query}->{query_string}->{query};
+		} elsif (ref $meta->{query}->{query} eq '') {
+			$meta->{query}->{query} = "*";
+			$raw_query = $meta->{query}->{query};
+		} else {
+			$p->plugin_exit(CRITICAL, "Can't parse output");
+		}
 
-			$meta->{query}->{query} =~ s/"/\\"/g;
-			$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
+		# Fetch filters from saved query
+		my $raw_bool_clauses = 'filter: [],';
+		if (ref $meta->{filter} eq ref []) {
+			$raw_bool_clauses = getBooleanClauses($meta->{filter});
+		}
+
+		$meta->{query}->{query} =~ s/"/\\"/g;
+		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { '.$raw_bool_clauses.'"must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
 	} else {
-			$p->plugin_exit(CRITICAL, "Saved query not found");
+		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
 }
 
@@ -353,6 +360,9 @@ elsif ($p->opts->documents > 0) {
 #### Subrutines
 sub getSearch {
 	my ($url, $index, $body) = @_;
+	print 'Search Url: '.$url."\n" if($p->opts->verbose);
+	print 'Search Index: '.$index."\n" if($p->opts->verbose);
+	print 'Search Query: '.$body."\n" if($p->opts->verbose);
 
 	# UserAgent
 	my $ua = LWP::UserAgent->new;
@@ -375,6 +385,57 @@ sub getSearch {
 
 	return undef;
 }
+
+# Handle filters
+sub getBooleanClauses {
+	my ($filters) = @_;
+	my $raw_filters = "\"filter\":[ ";
+	my $raw_must_not = "\"must_not\":[ ";
+	my $raw_should = '"should":[ ';
+
+	my $filter_delimiter = "";
+	my $must_not_delimiter = "";
+	my $minimum_should = "";
+
+	foreach my $filterJSON(@$filters) {
+		my $filterQueryMeta = $filterJSON->{meta};
+		my $isNegativeQuery = $filterQueryMeta->{negate};
+		my $queryType = lc $filterQueryMeta->{type};
+		my $fieldName = $filterQueryMeta->{key};
+		my $filterParams = $filterQueryMeta->{params};
+
+		#Handle range and phrase queries
+		my $rawFilterQuery = '';
+		if ($queryType eq 'phrase'){
+			$rawFilterQuery = '{ "term": { "'.$fieldName.'": "'.$filterParams->{query}.'" } }';
+		} elsif ($queryType eq 'phrases') {
+			$rawFilterQuery = encode_json($filterJSON->{query});
+		} elsif ($queryType eq 'exists') {
+			$rawFilterQuery = '{ "exists": '.encode_json($filterJSON->{exists}).' }';
+		} elsif ($queryType eq 'range') {
+			$rawFilterQuery = '{ "range": { "'.$fieldName.'": '.encode_json($filterParams).' } }';
+
+		} else {
+			plugin_exit(CRITICAL, 'UNKNOWN QUERY TYPE'.$queryType);
+		}
+
+		# sort filterquery into filter or must_not
+		if ($isNegativeQuery) {
+			$raw_must_not .= $must_not_delimiter.$rawFilterQuery;
+			$must_not_delimiter = ",";
+		} else {
+			$raw_filters .= $filter_delimiter.$rawFilterQuery;
+			$filter_delimiter = ",";
+		}
+	}
+	$raw_filters .= " ],";
+	$raw_must_not .= " ],";
+	$raw_should .= " ],";
+
+	print 'Raw Boolean Clauses: '.$raw_filters.$raw_should.$minimum_should.$raw_must_not."\n" if($p->opts->verbose);
+	return $raw_filters.$raw_must_not;
+}
+
 sub getSearchIndex {
 	my ($url, $index) = @_;
 
