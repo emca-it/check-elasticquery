@@ -209,18 +209,13 @@ $p->getopts;
 ##############################################################################
 # check stuff.
 
-
 unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
 	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
 }
 
-if ( defined $p->opts->query && defined $p->opts->search ) {
-	$p->plugin_exit(CRITICAL, "Query and saved search cann't be defined both");
-}
-
 if(defined $p->opts->oneliner) {
 	if($p->opts->documents > 1) {
-			$p->plugin_exit(CRITICAL, "Oneliner is blocked for one document only.");
+		$p->plugin_exit(CRITICAL, "Oneliner is blocked for one document only.");
 	}
 }
 
@@ -237,34 +232,45 @@ my $query;
 my $index;
 my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
 my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
+my $get;
 
+# If search option is used, get the saved search for kibana index.
 if (defined $p->opts->search) {
 	$query = '{ "query": { "bool": { "must": [ { "match": { "search.title": "'.$p->opts->search.'" } } ] }}}';
 	$index = '.kibana';
-}
-else
-{
-	if (not defined $p->opts->query) {
-		$query = '{ "size": 0, "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
-	} else {
-		if (not defined $p->opts->json) {
-			$query =  '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ { "query_string": { "query": "'.$p->opts->query.'", "analyze_wildcard": true, "default_field": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
-		} else {
-			$query = $p->opts->query;
-		}
-	}
-
-	$index = $p->opts->index;
+	$get = getSearch($p->opts->url, $index, $query);
 }
 
-my $total;
-my $get = getSearch($p->opts->url, $index, $query);
 my $raw_query;
+# If query option is used, get the raw query from the query argument
+# raw_query is set only if json option is not used.
+if (defined $p->opts->query) {
+	if (not defined $p->opts->json) {
+		$raw_query = '{ "query_string": { "query": "'.$p->opts->query.'", "analyze_wildcard": true, "default_field": "*" } },';
+		if($p->opts->documents > 0) {
+			$query =  '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { "must": [ '.$raw_query.' { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		} else {
+			$query =  '{ "query": { "bool": { "must": [ '.$raw_query.' { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		}
+	} else {
+		# for json query, raw_query is undefined
+		$query = $p->opts->query;
+	}
+}
 
-if (defined $p->opts->search) {
+# if query and search are not defined, fire default all match query. This will return doc count in the time range
+if (not defined $p->opts->query && not defined $p->opts->search) {
+	$query = '{ "query": { "bool": { "must": [ { "query_string": { "query": "*" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+}
+
+# reset the index to the value from command line argument as it might have been set to '.kibana' above
+$index = $p->opts->index;
+
+# If saved search is to be used, check for raw_query. If raw_query is present, replace saved search query with the raw_query.
+if (defined $p->opts->search && not defined $p->opts->json) {
 	print Dumper($get->{hits}->{hits}[0]) if($p->opts->verbose);
-
 	my $meta = decode_json($get->{hits}->{hits}[0]->{_source}->{search}->{kibanaSavedObjectMeta}->{searchSourceJSON}) if defined $get->{hits}->{hits}[0];
+
 	if(ref $meta eq ref {}) {
 		my $indexID = $meta->{index};
 
@@ -295,18 +301,21 @@ if (defined $p->opts->search) {
         $get = getSearchIndex($p->opts->url, $index);
 		$index = $get->{_source}->{'index-pattern'}->{title};
 
-		if (ref $meta->{query}->{query} eq ref {}) {
-			$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
-			$raw_query = $meta->{query}->{query}->{query_string}->{query};
-		} elsif (ref $meta->{query}->{query} eq '') {
-			if ($meta->{query}->{query} eq '') {
-				$meta->{query}->{query} = "*";
+		#if raw_query is already set above, use it. Else read main query from saved search.
+		if (not defined $raw_query) {
+			if (ref $meta->{query}->{query} eq ref {}) {
+				$meta->{query}->{query}->{query_string}->{query} =~ s/"/\\"/g;
+				$raw_query = '{ "query_string": { "query": "'.$meta->{query}->{query}->{query_string}->{query}.'" } },';
+			} elsif (ref $meta->{query}->{query} eq '') {
+				if ($meta->{query}->{query} eq '') {
+					$meta->{query}->{query} = "*";
+				} else {
+					$meta->{query}->{query} =~ s/"/\\"/g;
+				}
+				$raw_query = '{ "query_string": { "query": "'.$meta->{query}->{query}.'" } },';
 			} else {
-				$meta->{query}->{query} =~ s/"/\\"/g;
+				$p->plugin_exit(CRITICAL, "Can't parse output");
 			}
-			$raw_query = $meta->{query}->{query};
-		} else {
-			$p->plugin_exit(CRITICAL, "Can't parse output");
 		}
 
 		# Fetch filters from saved query
@@ -315,18 +324,34 @@ if (defined $p->opts->search) {
 			$raw_bool_clauses = getBooleanClauses($meta->{filter});
 		}
 
-		$get = getSearch($p->opts->url, $index, '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { '.$raw_bool_clauses.'"must": [ { "query_string": { "query": "' . $raw_query . '" } }, { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }');
+		if($p->opts->documents > 0) {
+			$query = '{ "size": '.$p->opts->documents.', '.$sort.'"query": { "bool": { '.$raw_bool_clauses.'"must": [ '.$raw_query.' { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		} else {
+			$query = '{ "query": { "bool": { '.$raw_bool_clauses.'"must": [ '.$raw_query.' { "range": { "'.$p->opts->timefield.'": { "gte": "'.$timestamp[1].'", "lte": "'.$timestamp[0].'" } } } ] } } }';
+		}
 	} else {
 		$p->plugin_exit(CRITICAL, "Saved query not found");
 	}
 }
 
-if(defined $get && ref $get->{hits} eq ref {}) {
+if($p->opts->documents > 0) {
+	$get = getSearch($p->opts->url, $index, $query);
+} else {
+	$get = getCount($p->opts->url, $index, $query);
+}
+
+my $total;
+if(defined $get && (ref $get->{hits} eq ref {} || defined $get->{count})) {
 	print Dumper($get) if ( $p->opts->verbose );
 	if (ref $get->{hits}->{total} eq ref {}) {
+		print "ES VERSION 7 Search \n" if($p->opts->verbose);
 		$total = $get->{hits}->{total}->{value};
-	} else {
+	} elsif (defined $get->{hits}->{total}) {
+		print "ES VERSION 6 Search \n" if($p->opts->verbose);
 		$total = $get->{hits}->{total};
+	} else {
+		print "ES Count \n" if($p->opts->verbose);
+		$total = $get->{count};
 	}
 	
 } else {
@@ -373,8 +398,7 @@ if (defined $p->opts->fields && $p->opts->documents>0) {
 	$exit =~ s/[\n\r]/ /g if(defined $p->opts->oneliner);
 	
 	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total " . $exit);
-}
-elsif ($p->opts->documents > 0) {
+} elsif ($p->opts->documents > 0) {
 	$exit .= "\n";
 	foreach my $n (@{$get->{hits}->{hits}}) {
 		$exit .= Dumper($n->{_source});
@@ -386,11 +410,11 @@ elsif ($p->opts->documents > 0) {
 	$exit =~ s/[\n\r]/ /g if(defined $p->opts->oneliner);
 	
 	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total ".$exit);
-} else { $p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); }
+} else { 
+	$p->plugin_exit($p->check_threshold(check => $total), $p->opts->name." ".(defined $p->opts->search?$p->opts->search:'').": $total"); 
+}
 
-
-
-#### Subrutines
+#### Subroutines
 sub getSearch {
 	my ($url, $index, $body) = @_;
 	print 'Search Url: '.$url."\n" if($p->opts->verbose);
@@ -419,11 +443,40 @@ sub getSearch {
 	return undef;
 }
 
+sub getCount {
+	my ($url, $index, $body) = @_;
+	print 'Fetching only count from ES \n' if($p->opts->verbose);
+	print 'Search Url: '.$url."\n" if($p->opts->verbose);
+	print 'Search Index: '.$index."\n" if($p->opts->verbose);
+	print 'Search Query: '.$body."\n" if($p->opts->verbose);
+
+	# UserAgent
+	my $ua = LWP::UserAgent->new;
+	$ua->agent($PROGNAME."/0.1");
+	$ua->timeout($p->opts->timeout);
+	# Create a request
+	my $req;
+	$req = HTTP::Request->new(POST => $url.'/'.$index.'/_count');
+	$req->content_type('application/json');
+	$req->content($body);
+	# Pass request to the user agent and get a response back
+	my $res = $ua->request($req);
+
+	# Check the outcome of the response
+	my $json = JSON->new;
+
+	$p->plugin_exit(CRITICAL, $res->message) if ($res->is_success == 0);
+
+	return $json->decode($res->content) if ($res->is_success == 1);
+
+	return undef;
+}
+
 # Handle filters
 sub getBooleanClauses {
 	my ($filters) = @_;
-	my $raw_filters = "\"filter\":[ ";
-	my $raw_must_not = "\"must_not\":[ ";
+	my $raw_filters = '"filter":[ ';
+	my $raw_must_not = '"must_not":[ ';
 	my $raw_should = '"should":[ ';
 
 	my $filter_delimiter = "";
@@ -505,3 +558,4 @@ sub dumpKeys {
 		
     return sprintf(Data::Dumper->new([\%new])->Useqq(1)->Dump, "\n");
 }
+
