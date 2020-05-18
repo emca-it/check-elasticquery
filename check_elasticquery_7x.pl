@@ -319,7 +319,7 @@ if (defined $p->opts->search && not defined $p->opts->json) {
 		}
 
 		# Fetch filters from saved query
-		my $raw_bool_clauses = 'filter: [],';
+		my $raw_bool_clauses = '"filter": [],';
 		if (ref $meta->{filter} eq ref []) {
 			$raw_bool_clauses = getBooleanClauses($meta->{filter});
 		}
