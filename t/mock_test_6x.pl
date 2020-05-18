@@ -11,7 +11,7 @@ print "Starting mock API server...\n";
 my($wtr, $rdr, $err);
 use Symbol 'gensym'; $err = gensym;
 $mockapi_pid = open3($wtr, $rdr, $err,
-                    "$dirname/mock_api.pl", "daemon");
+                    "$dirname/mock_api_6x.pl", "daemon");
 sleep(2);
 
 my $output, $exitcode;
