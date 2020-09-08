@@ -6,7 +6,7 @@
 
 # Work with Elasticsearch 6
 # Dependencies for Centos 7:
-# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape
+# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape perl-File-Slurp
 
 ##############################################################################
 # prologue
@@ -15,6 +15,7 @@ use strict;
 use warnings;
 
 use File::Basename qw(dirname);
+use File::Slurp;
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
@@ -27,7 +28,7 @@ use String::Escape qw( backslash );
 
 
 use vars qw($VERSION $PROGNAME  $verbose $warn $critical $timeout $result);
-$VERSION = '1.0.0';
+$VERSION = '1.0.1';
 
 # get the base name of this script for use in the examples
 use File::Basename;
@@ -52,9 +53,11 @@ my $p = Monitoring::Plugin->new(
     [ -f|--fields=<fields to show> ]
     [ -l|--length=<max field length> ]
     [ -N|--name=<output string> ]
+    [ -k|--insecure ]
+    [ --credentials=<path to file> ]
+    [ --hidecurly ]
     [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
-    [ --hidecurly ]
     [ -t <timeout>]
     [ -v|--verbose ]",
     version => $VERSION,
@@ -202,9 +205,31 @@ qq{--oneliner
     Show one document in first line. },
 );
 
+$p->add_arg(
+        spec => 'insecure|k',
+        help =>
+qq{-k, --insecure
+    Allow insecure SSL connections. },
+);
+
+$p->add_arg(
+        spec => 'credentials=s',
+        help =>
+qq{--credentials=s
+    Path for credentials. File's Content format username:password.},
+);
+
 
 # Parse arguments and process standard ones (e.g. usage, help, version)
 $p->getopts;
+
+# Variables
+my $query;
+my $index;
+my @timestamp;
+my $sort;
+my $get;
+my @auth;
 
 ##############################################################################
 # check stuff.
@@ -212,6 +237,21 @@ $p->getopts;
 
 unless ( not defined $p->opts->search && not defined $p->opts->timerange ) {
 	$p->plugin_exit(CRITICAL, "Define timerange for the saved search");
+}
+
+if(defined $p->opts->insecure) {
+    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
+}
+
+
+if(defined $p->opts->credentials) {
+    my $file = read_file($p->opts->credentials, chomp => 1);
+    chomp($file);
+    if (!$file) {
+        $p->plugin_exit(CRITICAL, "Can not read credential file.");
+    } else {
+        @auth = split(/:/, $file);
+    }
 }
 
 if(defined $p->opts->oneliner) {
@@ -229,11 +269,8 @@ if ( $p->opts->verbose ) {
 	print "Query: ".$p->opts->query."\n" if defined $p->opts->query;
 }
 
-my $query;
-my $index;
-my @timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
-my $sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
-my $get;
+@timestamp = split(/:/, $p->opts->timerange) if (defined $p->opts->timerange);
+$sort = $p->opts->documents>0?'"sort" : [ { "'.$p->opts->timefield.'" : {"order" : "desc"}} ],':'';
 
 # If search option is used, get the saved search for kibana index.
 if (defined $p->opts->search) {
@@ -382,6 +419,9 @@ sub getSearch {
 	# Create a request
 	my $req;
 	$req = HTTP::Request->new(POST => $url.'/'.$index.'/_search');
+    if(!scalar  @auth == 0) {
+        $req->authorization_basic($auth[0], $auth[1]);
+    }
 	$req->content_type('application/json');
 	$req->content($body);
 	# Pass request to the user agent and get a response back
@@ -457,6 +497,9 @@ sub getSearchIndex {
 	# Create a request
 	my $req;
 	$req = HTTP::Request->new(GET => $url.'/'.$index);
+    if(!scalar  @auth == 0) {
+        $req->authorization_basic($auth[0], $auth[1]);
+    }
 
 	# Pass request to the user agent and get a response back
 	my $res = $ua->request($req);
