@@ -7,46 +7,55 @@ This plugin check Elasticsearch query total documents. It is aimed to work with 
 
 **Usage**
 ```
-$ ./check_elasticquery.pl -U|--url=<url> -i|--index=<index> 
-    [ -q|--query=<json query> ]
+$ ./check_elasticquery_7x.pl -U|--url=<url> -i|--index=<index>
+    [ -q|--query=<lucene query> ]
+    [ -j|--json]
     [ -S|--search=<saved search> ]
     [ -T|--timerange=<lte:gte> ]
     [--timefield=<time field> ]
-    [ -c|--critical=<critical threshold> ] 
+    [ -D|--documents=<number of latest documents to show> ]
+    [ -f|--fields=<fields to show> ]
+    [ -l|--length=<max field length> ]
+    [ -N|--name=<output string> ]
+    [ -k|--insecure ]
+    [ --credentials=<path to file> ]
+    [ --hidecurly ]
+    [ -c|--critical=<critical threshold> ]
     [ -w|--warning=<warning threshold> ]
     [ -t <timeout>]
     [ -v|--verbose ]
+
 ```
 
 **Usage examples**
 
 Total documents in  'beats*' index for latest 24 hours. Latest 24 hours is default time range.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*'`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*'`
 
 Execute saved search named *protection* for latest 15 minutes. By default it checks *@timestamp* field, you can change it in *--timefield* option.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m'`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m'`
 
 As above plus show one latest document.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1`
 
 As above plus filter output to selected fields.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp`
 
 As above plus limit output fields value to 100 characters.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp -l 100`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -S 'protection' -T 'now:now-15m' -D 1 -f message,timestamp -l 100`
 
 Execute lucene query.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -q 'beat.name:example.com' -T 'now:now-15m' -D 1 -f message,timestamp`
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -q 'beat.name:example.com' -T 'now:now-15m' -D 1 -f message,timestamp`
 
 Execute json query. Time range option wouldn't work. You should define time range in query.
 
-`./check_elasticquery.pl -U 'http://user:password@localhost:9200' -i 'beats*' -j -q '
+`./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -j -q '
 {
  "size": 0,
  "query": {
