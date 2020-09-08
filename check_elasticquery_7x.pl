@@ -6,7 +6,7 @@
 
 # Work with Elasticsearch 7
 # Dependencies for Centos 7:
-# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape
+# yum install perl-Monitoring-Plugin perl-libwww-perl perl-LWP-Protocol-https perl-JSON perl-String-Escape perl-File-Slurp
 
 ##############################################################################
 # prologue
