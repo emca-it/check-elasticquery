@@ -1,5 +1,5 @@
 # check-elasticquery
-This plugin check Elasticsearch query total documents. It is aimed to work with Energy Logserver, OP5 Log Analytics and is supposed to work with opensource Elasticsearch and x-pack.
+This plugin check Elasticsearch query total documents. It is aimed to work with Energy Logserver, OP5 Log Analytics, CyberX and is supposed to work with opensource Elasticsearch and x-pack.
 
 **Dependencies for Centos 7:**
 
