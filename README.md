@@ -57,7 +57,6 @@ Execute json query. Time range option wouldn't work. You should define time rang
 
 `./check_elasticquery_7x.pl -U 'http://user:password@localhost:9200' -i 'beats*' -j -q '
 {
- "size": 0,
  "query": {
     "bool": {
       "must": [
