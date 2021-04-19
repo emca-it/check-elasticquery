@@ -3,15 +3,25 @@ use Mojolicious::Lite;
 use Data::Dumper;
 use JSON;
 
+my ($counter_name, $search_endpoint);
+my $version = pop(@ARGV) or die;
+if ($version eq '6x') {
+	$counter_name = 'hits';
+	$search_endpoint = '_search';
+}
+else {
+	$counter_name = 'count';
+	$search_endpoint = '_count';
+}
 my %savedSearches;
 $savedSearches{"saved_search_1"}{"index_hash"}  = "d9922a60-449d-11e9-932a-bfe6cbee1330";
-$savedSearches{"saved_search_1"}{"index_name"}  = "bla";
-$savedSearches{"saved_search_1"}{"hits"}        = 25;
+$savedSearches{"saved_search_1"}{"index_name"}  = "foo";
+$savedSearches{"saved_search_1"}{$counter_name} = 25;
 $savedSearches{"saved_search_1"}{"query"}       = "user_agent = Mozilla*";
 
 $savedSearches{"saved_search_2"}{"index_hash"}  = "d9922a60-449d-11e9-932a-bfe6cbee1331";
-$savedSearches{"saved_search_2"}{"index_name"}  = "bla";
-$savedSearches{"saved_search_2"}{"hits"}        = 12;
+$savedSearches{"saved_search_2"}{"index_name"}  = "bar";
+$savedSearches{"saved_search_2"}{$counter_name} = 12;
 $savedSearches{"saved_search_2"}{"query"}       = "user_agent = Mozilla*";
 
 post '/.kibana/_search' => sub {
@@ -35,16 +45,22 @@ get "/.kibana/doc/index-pattern:hash" => sub {
     );
 };
 
-post '/:index_name/_search' => sub {
+post "/:index_name/$search_endpoint" => sub {
     my ( $mojo ) = @_;
     my $index_name = $mojo->stash('index_name');
     my $body = $mojo->req->body;
     my $json = decode_json ($body);
     my $query = $json->{'query'}->{'bool'}->{'must'}[0]->{'query_string'}->{"query"};
     my $savedSearch = findSearchByIndexQuery($index_name, $query);
-    return $mojo->render(
-        json => {hits => {'total' => $savedSearch->{'hits'}}}
-    );
+	my $count = $savedSearch->{$counter_name};
+	if ($counter_name eq 'hits') {
+		return $mojo->render(
+			json => {'hits' => {'total' => $count}}
+		);
+	}
+	return $mojo->render(
+		json => {'count' => $count}
+	);
 };
 
 sub findSearchByHash {
