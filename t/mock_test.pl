@@ -4,17 +4,18 @@ use Cwd 'abs_path';
 use File::Basename;
 
 my $dirname = dirname(abs_path($0));
-my $script = "$dirname/../check_elasticquery_7x.pl";
+my $version = shift or die "Usage: $0 (6x|7x)\n";
+my $script = "$dirname/../check_elasticquery_${version}.pl";
 
 # Setup of Mock API server
 print "Starting mock API server...\n";
 my($wtr, $rdr, $err);
 use Symbol 'gensym'; $err = gensym;
 $mockapi_pid = open3($wtr, $rdr, $err,
-                    "$dirname/mock_api_7x.pl", "daemon");
+                     "$dirname/mock_api_server.pl", "daemon", $version);
 sleep(2);
 
-my $output, $exitcode;
+my ($output, $exitcode);
 
 # Test OK
 $output = `$script -U 'http://localhost:3000' -S 'saved_search_1' -T 'now:now-30d' -w 35 -c 50`;
@@ -24,21 +25,21 @@ ok ($exitcode == 0);
 ok (index($output, "OK") != -1);
 
 # Test Warning
-$output = `$script -U 'http://localhost:3000' -S 'saved_search_2' -T 'now:now-30d' -w 20 -c 30`;
+$output = `$script -U 'http://localhost:3000' -S 'saved_search_1' -T 'now:now-30d' -w 20 -c :30`;
 $exitcode = $?>>8;
 
 ok ($exitcode == 1);
 ok (index($output, "WARNING") != -1);
 
 # Test critical
-$output = `$script -U 'http://localhost:3000' -S 'saved_search_2' -T 'now:now-30d' -w 10 -c 20`;
+$output = `$script -U 'http://localhost:3000' -S 'saved_search_2' -T 'now:now-30d' -w 2:5 -c 10`;
 $exitcode = $?>>8;
 
 ok ($exitcode == 2);
 ok (index($output, "CRITICAL") != -1);
 
 # verify perfdata format
-ok (index($output, "total=25;10;20") != -1);
+ok (index($output, "total=12;2:5;10") != -1);
 
 # shut down the mock API server
 kill 'TERM', $mockapi_pid;
